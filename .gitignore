@@ -1,0 +1,31 @@
+# =========================================================================
+# Multi-Module Java Maven Build Artifacts
+# =========================================================================
+# Ignores target/ directories inside api-gateway, course-svc, and service-registry
+**/target/
+*.jar
+*.war
+*.zip
+
+# =========================================================================
+# IDEs and Text Editors
+# =========================================================================
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# VS Code / Eclipse
+.vscode/
+.classpath
+.project
+.settings/
+
+# =========================================================================
+# Logs and System Files
+# =========================================================================
+*.log
+logs/
+.DS_Store
+Thumbs.db
