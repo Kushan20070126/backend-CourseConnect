@@ -22,13 +22,16 @@ public class CourseService {
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final MinioService minioService;
+    private final MongoContentService contentService;
 
     public CourseService(CourseRepository courseRepository,
                          EnrollmentRepository enrollmentRepository,
-                         MinioService minioService) {
+                         MinioService minioService,
+                         MongoContentService contentService) {
         this.courseRepository = courseRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.minioService = minioService;
+        this.contentService = contentService;
     }
 
     // ---------------------------------------------------------------- create
@@ -60,6 +63,9 @@ public class CourseService {
     @Transactional
     public void delete(Long id, String instructorId) {
         Course course = ownedCourse(id, instructorId);
+        contentService.deleteCourseContent(id);
+        List<Enrollment> enrollments = enrollmentRepository.findByCourseId(id);
+        enrollmentRepository.deleteAll(enrollments);
         courseRepository.delete(course);
     }
 
@@ -106,6 +112,7 @@ public class CourseService {
         out.put("requirements", splitLines(course.getRequirements()));
         out.put("enrolled", enrolledActive);
         out.put("paid", course.getPrice() != null && course.getPrice() > 0);
+        out.put("reviews", contentService.reviewSummary(id));
 
         List<Map<String, Object>> sections = new ArrayList<>();
         for (Section sec : course.getSections()) {
