@@ -19,7 +19,6 @@ public class Lecturer extends User {
     private String area;
     private String bio;
 
-    // ACTIVE = approved & visible on the platform, PENDING = awaiting admin approval.
     @Column(nullable = false, columnDefinition = "VARCHAR2(16) DEFAULT 'ACTIVE'")
     private String status = "ACTIVE";
 }

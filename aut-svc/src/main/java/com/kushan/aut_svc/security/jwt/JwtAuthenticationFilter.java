@@ -1,5 +1,6 @@
 package com.kushan.aut_svc.security.jwt;
 
+import com.kushan.aut_svc.repository.SessionRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,9 +20,11 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final SessionRepository sessionRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, SessionRepository sessionRepository) {
         this.jwtService = jwtService;
+        this.sessionRepository = sessionRepository;
     }
 
     @Override
@@ -37,8 +40,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 String email = jwtService.getSubject(token);
                 String role = jwtService.getRole(token);
+                String jti = jwtService.getJti(token);
 
-                if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                boolean sessionActive = sessionRepository.countByJtiAndActiveTrue(jti) > 0;
+
+                if (email != null && sessionActive
+                        && SecurityContextHolder.getContext().getAuthentication() == null) {
                     var authorities = List.of(new SimpleGrantedAuthority(role));
                     var authToken = new UsernamePasswordAuthenticationToken(email, null, authorities);
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

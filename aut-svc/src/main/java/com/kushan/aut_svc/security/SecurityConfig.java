@@ -3,10 +3,10 @@ package com.kushan.aut_svc.security;
 
 import com.kushan.aut_svc.security.jwt.JwtAuthenticationFilter;
 import com.kushan.aut_svc.service.UserService;
-import lombok.AllArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -25,14 +25,22 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
-@AllArgsConstructor
 public class SecurityConfig {
 
     private final UserService userService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    @Value("${app.cors.allowed-origins}")
+    private String configuredOrigins;
+
+    @Autowired
+    public SecurityConfig(UserService userService, JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.userService = userService;
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
     @Bean
     public UserDetailsService userDetailsService() {
@@ -48,9 +56,7 @@ public class SecurityConfig {
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider =
                 new DaoAuthenticationProvider(userDetailsService());
-
         provider.setPasswordEncoder(passwordEncoder());
-
         return provider;
     }
 
@@ -60,40 +66,36 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(Arrays.stream(configuredOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+        config.setExposedHeaders(List.of("Authorization"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/req/signup", "/req/login", "/req/admin/login", "/req/verify-otp", "/req/resend-otp").permitAll()
+                        // Allow the internal error dispatch to be rendered; otherwise
+                        // ResponseStatusException bodies get swallowed into an opaque 403.
+                        .requestMatchers("/error").permitAll()
+                        .requestMatchers("/req/signup", "/req/login", "/req/admin/login", "/req/verify-otp", "/req/resend-otp",
+                                "/req/forgot-password", "/req/reset-password").permitAll()
                         .requestMatchers("/req/me").authenticated()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
-    }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        // Restrict to the front-end origins that serve register.html / login.html.
-        // Add your real dev/prod origins here instead of using a wildcard.
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:5500",
-                "http://127.0.0.1:5500",
-                "http://localhost:3000",
-                "http://127.0.0.1:3000"
-        ));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
-        configuration.setExposedHeaders(List.of("Authorization"));
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
     }
 }

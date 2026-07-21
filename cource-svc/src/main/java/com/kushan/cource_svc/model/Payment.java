@@ -22,9 +22,9 @@ public class Payment {
     private Long courseId;
 
     @Column(nullable = false)
-    private String studentId;   // student email
+    private String studentId;
 
-    private Integer amountCents = 0;   // Stripe amount in smallest unit
+    private Integer amountCents = 0;
     private String currency = "USD";
 
     private String stripeSessionId;

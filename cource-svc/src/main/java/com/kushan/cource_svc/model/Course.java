@@ -30,6 +30,8 @@ public class Course {
     private String description;
 
     private String category;
+
+    @Column(name = "course_level")
     private String level;      // Beginner | Intermediate | Advanced
     private String language = "English";
 

@@ -43,8 +43,8 @@ public class StripeService {
         long cents = BigDecimal.valueOf(course.getPrice() == null ? 0 : course.getPrice())
                 .multiply(BigDecimal.valueOf(100)).longValue();
 
-        String success = frontendBase + "/course.html?id=" + courseId + "&enrolled=1&session_id={CHECKOUT_SESSION_ID}";
-        String cancel = frontendBase + "/course.html?id=" + courseId + "&canceled=1";
+        String success = frontendBase + "/courses/" + courseId + "?enrolled=1&session_id={CHECKOUT_SESSION_ID}";
+        String cancel = frontendBase + "/courses/" + courseId + "?canceled=1";
 
         SessionCreateParams params = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.PAYMENT)
@@ -70,8 +70,27 @@ public class StripeService {
         try {
             Session session = Session.create(params);
             return new CheckoutResult(session.getId(), session.getUrl());
+        } catch (com.stripe.exception.AuthenticationException e) {
+            throw new RuntimeException(
+                    "Stripe authentication failed. Check that stripe.api-key is a valid secret key.", e);
         } catch (Exception e) {
             throw new RuntimeException("Stripe checkout failed: " + e.getMessage(), e);
+        }
+    }
+
+    /** Returns the current checkout URL for an existing session, or null if it can't be retrieved. */
+    public String retrieveCheckoutUrl(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return null;
+        try {
+            Session session = Session.retrieve(sessionId);
+            String status = session.getStatus();
+            // Only reuse sessions that are still open/unexpired.
+            if ("open".equalsIgnoreCase(status) || status == null) {
+                return session.getUrl();
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -82,7 +101,8 @@ public class StripeService {
             String status = session.getPaymentStatus();
             return "paid".equalsIgnoreCase(status);
         } catch (Exception e) {
-            throw new RuntimeException("Could not retrieve Stripe session: " + e.getMessage(), e);
+            // Network/key/API issues must not break the dev confirm flow.
+            return false;
         }
     }
 

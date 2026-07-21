@@ -24,17 +24,20 @@ public class EnrollmentService {
     private final PaymentRepository paymentRepository;
     private final StripeService stripeService;
     private final MinioService minioService;
+    private final MongoContentService contentService;
 
     public EnrollmentService(CourseRepository courseRepository,
                              EnrollmentRepository enrollmentRepository,
                              PaymentRepository paymentRepository,
                              StripeService stripeService,
-                             MinioService minioService) {
+                             MinioService minioService,
+                             MongoContentService contentService) {
         this.courseRepository = courseRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.paymentRepository = paymentRepository;
         this.stripeService = stripeService;
         this.minioService = minioService;
+        this.contentService = contentService;
     }
 
     // ---------------------------------------------------------------- enroll
@@ -43,11 +46,47 @@ public class EnrollmentService {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not found"));
 
-        if (enrollmentRepository.findByStudentIdAndCourseId(studentId, courseId).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "You are already enrolled in this course");
-        }
-
         boolean free = course.getPrice() == null || course.getPrice() <= 0;
+
+        Optional<Enrollment> existing = enrollmentRepository.findByStudentIdAndCourseId(studentId, courseId);
+        if (existing.isPresent()) {
+            Enrollment e = existing.get();
+            if ("ACTIVE".equals(e.getStatus()) || "COMPLETED".equals(e.getStatus())) {
+                return Map.of("status", "active", "enrollmentId", e.getId());
+            }
+            // PENDING -> recover the checkout so the user can finish paying instead of being stuck.
+            if (!free) {
+                Payment payment = paymentRepository
+                        .findByCourseIdAndStudentId(courseId, studentId)
+                        .orElse(null);
+                String url = payment != null ? stripeService.retrieveCheckoutUrl(payment.getStripeSessionId()) : null;
+                if (url == null) {
+                    if (payment == null) {
+                        payment = new Payment();
+                        payment.setCourseId(courseId);
+                        payment.setStudentId(studentId);
+                        long cents = Math.round(course.getPrice() * 100);
+                        payment.setAmountCents((int) cents);
+                        payment.setCurrency(course.getCurrency() == null ? "USD" : course.getCurrency());
+                        payment.setStatus("CREATED");
+                        payment = paymentRepository.save(payment);
+                    }
+                    StripeService.CheckoutResult checkout =
+                            stripeService.createCheckout(course, studentId, payment.getId(), courseId);
+                    payment.setStripeSessionId(checkout.sessionId());
+                    paymentRepository.save(payment);
+                    url = checkout.url();
+                }
+                return Map.of(
+                        "status", "checkout",
+                        "enrollmentId", e.getId(),
+                        "paymentId", payment != null ? payment.getId() : null,
+                        "sessionId", payment != null ? payment.getStripeSessionId() : null,
+                        "checkoutUrl", url
+                );
+            }
+            return Map.of("status", "active", "enrollmentId", e.getId());
+        }
 
         if (free) {
             Enrollment e = new Enrollment();
@@ -143,6 +182,8 @@ public class EnrollmentService {
                 lm.put("preview", l.isPreview());
                 lm.put("completed", done.contains(String.valueOf(l.getId())));
                 lm.put("videoUrl", minioService.viewUrl(l.getVideoUrl()));
+                lm.put("materials", contentService.materialsForLesson(l.getId()));
+                lm.put("notes", contentService.notesForLesson(l.getId()));
                 lessons.add(lm);
             }
             sm.put("lessons", lessons);
@@ -152,6 +193,7 @@ public class EnrollmentService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("courseId", course.getId());
         out.put("title", course.getTitle());
+        out.put("status", enrollment.getStatus());
         out.put("progressPercent", enrollment.getProgressPercent());
         out.put("completed", "COMPLETED".equals(enrollment.getStatus()));
         out.put("badge", "COMPLETED".equals(enrollment.getStatus()));

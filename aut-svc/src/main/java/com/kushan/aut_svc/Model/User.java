@@ -38,4 +38,11 @@ public abstract class User {
 
     @Column(name = "ROLE_TYPE", insertable = false, updatable = false)
     private String role;
+
+    // Password-reset OTP (in-memory signup OTP is separate, on OtpService).
+    @Column(name = "reset_otp")
+    private String resetOtp;
+
+    @Column(name = "reset_otp_expiry")
+    private java.time.LocalDateTime resetOtpExpiry;
 }

@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.UUID;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -27,12 +29,17 @@ public class JwtService {
         Date expiry = new Date(now.getTime() + expirationMs);
 
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(subject)
                 .claim("role", role)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(getKey())
                 .compact();
+    }
+
+    public long getExpirationSeconds() {
+        return expirationMs / 1000;
     }
 
     public Claims parseToken(String token) {
@@ -50,4 +57,9 @@ public class JwtService {
     public String getRole(String token) {
         return parseToken(token).get("role", String.class);
     }
+
+    public String getJti(String token) {
+        return parseToken(token).getId();
+    }
+
 }
